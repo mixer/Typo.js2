@@ -1,6 +1,6 @@
 {
-  "name": "typo.js2",
-  "version": "1.0.0",
+  "name": "@mcph/typo.js2",
+  "version": "0.1.0",
   "description": "Typo.js is a JavaScript spellchecker that uses Hunspell-style dictionaries.",
   "typings": "lib/src/index",
   "main": "lib/src/index.js",
@@ -27,9 +27,19 @@
     "Christopher Finke",
     "Connor Peet <connor@peet.io>"
   ],
+  "keywords": [
+    "spellcheck",
+    "spellchecker",
+    "hunspell",
+    "typo",
+    "speling"
+  ],
   "license": "BSD-3-Clause",
   "bugs": {
     "url": "https://github.com/WatchBeam/Typo.js/issues"
   },
-  "homepage": "https://github.com/WatchBeam/Typo.js#readme"
+  "homepage": "https://github.com/WatchBeam/Typo.js#readme",
+  "browser": {
+    "fs": false
+  }
 }
