@@ -30,17 +30,17 @@ describe('typo', () => {
 
 	describe('suggestions', () => {
     runSuggestTable([
-      { args: ['speling', 3], expected: ['spelling', 'spieling', 'spewing'] },
+      { args: ['speling', 3], expected: ['spieling', 'spelling', 'spewing'] },
 
       // Repeated calls function properly.
-      { args: ['speling', 1], expected: ['spelling'] },
-      { args: ['speling'], expected: ['spelling', 'spieling', 'spewing', 'selling', 'peeling'] },
-      { args: ['speling', 2], expected: ['spelling', 'spieling'] },
-      { args: ['speling'], expected: ['spelling', 'spieling', 'spewing', 'selling', 'peeling'] },
+      { args: ['speling', 1], expected: ['spieling'] },
+      { args: ['speling'], expected: ['spieling', 'spelling', 'spewing', 'pealing', 'peeing'] },
+      { args: ['speling', 2], expected: ['spieling', 'spelling'] },
+      { args: ['speling'], expected: ['spieling', 'spelling', 'spewing', 'pealing', 'peeing'] },
 
       // Requesting more suggestions than will be returned doesn't break anything.
-      { args: ['spartang', 50], expected: ['spartan', 'sparing', 'smarting', 'starting', 'sprang', 'sporting', 'parting', 'spatting', 'sparking', 'sparling', 'sparring', 'spurting'] },
-      { args: ['spartang', 30], expected: ['spartan', 'sparing', 'smarting', 'starting', 'sprang', 'sporting', 'parting', 'spatting', 'sparking', 'sparling', 'sparring', 'spurting'] },
+      { args: ['spartang', 50], expected: ['spartan', 'parting', 'sparing', 'sprangs'] },
+      { args: ['spartang', 30], expected: ['spartan', 'parting', 'sparing', 'sprangs'] },
       { args: ['spartang', 1], expected: ['spartan'] },
 
       { args: ['spitting'], expected: [], message: 'Correctly spelled words receive no suggestions.' },
@@ -197,7 +197,7 @@ describe('typo', () => {
 	describe('Capitalizations are handled properly.', function () {
     runSuggestTable([
 		  { args: ['Wagh'], expected: ['Weigh'] },
-		  { args: ['CEIT'], expected: ['CENT', 'CHIT', 'CERT', 'CIT', 'CIT'] },
+		  { args: ['CEIT'], expected: ['CERT', 'CENT', 'CIT', 'CITY', 'CIR'] },
     ]);
 	});
 });

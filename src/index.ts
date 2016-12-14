@@ -33,7 +33,11 @@ export default class Typo {
     Object.assign(this, settings);
   }
 
-  public loadDictionary(dictionary?: string, affData?: string, wordsData?: any): Promise<void> {
+  public loadDictionary(dictionary?: string, options: {
+    affData?: string;
+    wordsData?: string;
+    lazy?: boolean;
+  } = {}): Promise<void> {
     let path: string;
     if (this.dictionaryPath) {
       path = this.dictionaryPath;
@@ -46,21 +50,26 @@ export default class Typo {
     }
 
     let promise: Promise<any> = Promise.resolve();
-    if (!affData) {
+    if (!options.affData) {
       promise = promise
         .then(() => readFile(`${path}/${dictionary}/${dictionary}.aff`))
         .then(data => this.affData = data);
+    } else {
+      this.affData = options.affData;
     }
-    if (!wordsData) {
+
+    if (!options.wordsData) {
       promise = promise
         .then(() => readFile(`${path}/${dictionary}/${dictionary}.dic`))
         .then(data => this.wordsData = data);
+    } else {
+      this.wordsData = options.wordsData;
     }
 
-    return promise.then(() => this.setup());
+    return promise.then(() => this.setup(options.lazy));
   }
 
-  private setup(): Promise<void> {
+  private setup(lazy: boolean = true): Promise<void> {
     if (this.worker) {
       this.worker.destroy();
     }
@@ -68,8 +77,9 @@ export default class Typo {
     this.worker = new InlineWebWorker<IProcCommand, any>(entryStr, prefixStr);
     return this.worker.run({
       action: 'setup',
-      wordsData: this.wordsData,
       affData: this.affData,
+      lazy,
+      wordsData: this.wordsData,
     });
   }
 
@@ -86,14 +96,6 @@ export default class Typo {
       word,
       limit,
     });
-  }
-
-  public dumpState(): Promise<string> {
-    return this.worker.run({ action: 'dumpState' });
-  }
-
-  public restoreState(state: string): Promise<void> {
-    return this.worker.run({ action: 'restoreState', state });
   }
 
   public destroy() {

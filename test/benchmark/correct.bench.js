@@ -8,4 +8,5 @@ suite('Typo', () => {
   before(next => dictionary.loadDictionary('en_US').then(next));
   bench('check', next => dictionary.check(getWord()).then(next));
   bench('suggest', next => dictionary.suggest(getWord()).then(next));
+  bench('load dictionary', next => new Typo().loadDictionary('en_US').then(next));
 });

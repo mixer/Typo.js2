@@ -16,6 +16,10 @@ function prefix() {
     [word: string]: IAAFRule[][];
   }
 
+  interface ILazyDeletionTable {
+    children: { [char: string]: string[] };
+  }
+
   let rules: { [name: string]: IAAFRule };
   let compoundRuleCodes: { [name: string]: string[] };
   let dictionaryTable: IDictionaryTable;
@@ -29,6 +33,9 @@ function prefix() {
     NEEDAFFIX?: string,
     ONLYINCOMPOUND?: string,
   } = Object.create(null);
+
+  let lazyDeletionTable: { [char: string]: ILazyDeletionTable } = {};
+  let lazilyResolvedWords: { [word: string]: boolean } = {};
 
   const maxEditDistance = 2;
 
@@ -513,7 +520,7 @@ function prefix() {
   ): string[] {
     if(word.length > 1 ) {
       for (let i = 0; i < word.length; i++) {
-        let delItem: string = word.substring(0, i) + word.substring(i + 1);
+        let delItem: string = (word.substring(0, i) + word.substring(i + 1)).toLowerCase();
 
         if (!deletes[delItem]) {
           deletes[delItem] = true;
@@ -521,21 +528,60 @@ function prefix() {
             generateDeletions(delItem, maxDistance, editDistance + 1, deletes);
           }
         }
-
       }
     }
 
     return editDistance === 0 ? Object.keys(deletes) : null;
   }
 
-  function generateDeletionTable() {
+  function resolveDeletion(word: string): string[] {
+    const t1 = lazyDeletionTable[word[0].toLowerCase()];
+    if (!t1) {
+      return;
+    }
+
+    for (let i = 1; i < maxEditDistance; i++) {
+      let t2 = t1.children[(word[i] || '').toLowerCase()];
+      if (!t2) {
+        continue;
+      }
+
+      for (let k = 0; k < t2.length; k++) {
+        if (lazilyResolvedWords[t2[k]]) {
+          continue;
+        }
+
+        const deletions = generateDeletions(t2[k], 0);
+        lazilyResolvedWords[t2[k]] = true;
+
+        for (let j = 0; j < deletions.length; j++) {
+          if (!deletionTable[deletions[j]]) {
+            deletionTable[deletions[j]] = [t2[k]];
+          } else {
+            deletionTable[deletions[j]].push(t2[k]);
+          }
+        }
+      }
+
+      delete t1.children[word[i]];
+    }
+  }
+
+  function prepareLazyTable() {
+    lazilyResolvedWords = Object.create(null);
+
     for (let word in dictionaryTable) {
-      const deletions = generateDeletions(word, 0);
-      for (let i = 0; i < deletions.length; i++) {
-        if (!deletionTable[deletions[i]]) {
-          deletionTable[deletions[i]] = [word];
+      let t1 = lazyDeletionTable[word[0]];
+      if (!t1) {
+        t1 = lazyDeletionTable[word[0]] = { children: {} };
+      }
+
+      for (let i = 1; i < maxEditDistance; i++) {
+        let t2 = t1.children[(word[i] || '').toLowerCase()];
+        if (!t2) {
+          t1.children[word[i]] = [word];
         } else {
-          deletionTable[deletions[i]].push(word);
+          t2.push(word);
         }
       }
     }
@@ -544,10 +590,11 @@ function prefix() {
   let memoized: { [word: string]: { suggestions: string[], limit: number } } = Object.create(null);
 
   const proc = {
-    setup(affData: string, wordsData: string) {
+    setup(affData: string, wordsData: string, lazy: boolean) {
       rules = parseAAF(affData);
       memoized = Object.create(null);
       deletionTable = Object.create(null);
+      lazyDeletionTable = Object.create(null);
 
       // Save the rule codes that are used in compound rules.
       compoundRuleCodes = Object.create(null);
@@ -594,7 +641,12 @@ function prefix() {
         }
 
         compoundRules[i] = new RegExp(expressionText, 'i');
-        generateDeletionTable();
+
+        if (!lazy) {
+          throw new Error('not implemented');
+        } else {
+          prepareLazyTable();
+        }
       }
     },
 
@@ -688,9 +740,11 @@ function prefix() {
 
       function correct(word: string) {
         const deletions = generateDeletions(word, maxEditDistance);
+        deletions.push(word);
 
         let corrections: string[] = [];
         for (let i = 0; i < deletions.length; i++) {
+          resolveDeletion(deletions[i]);
           const words = deletionTable[deletions[i]];
           if (words) {
             for (let k = 0; k < words.length; k++) {
@@ -701,7 +755,9 @@ function prefix() {
           }
         }
 
-        const sortedCorrections: [string, number][] = <any> corrections.map(c => [c, damlev(word, c)]);
+        const sortedCorrections: [string, number][] = <any> corrections.map(c => {
+          return [c, damlev(word.toLowerCase(), c.toLowerCase())];
+        });
         sortedCorrections.sort((a, b) => a[1] - b[1]);
 
         const rv: string[] = [];
@@ -737,29 +793,6 @@ function prefix() {
 
       return memoized[word]['suggestions'];
     },
-
-    dumpDictionaryState() {
-      return JSON.stringify({
-        rules,
-        compoundRuleCodes,
-        dictionaryTable,
-        deletionTable,
-        compoundRules,
-        replacementTable,
-        flags,
-      });
-    },
-
-    restoreDictionaryState(data: string) {
-      const obj = JSON.parse(data);
-      rules = obj.rules;
-      compoundRuleCodes = obj.compoundRuleCodes;
-      dictionaryTable = obj.dictionaryTable;
-      deletionTable = obj.deletionTable;
-      compoundRules = obj.compoundRules;
-      replacementTable = obj.replacementTable;
-      flags = obj.flags;
-    },
   };
 
   return proc;
@@ -769,15 +802,7 @@ export interface ISetupCommand {
   action: 'setup';
   affData: string;
   wordsData: string;
-}
-
-export interface IDumpStateCommand {
-  action: 'dumpState';
-}
-
-export interface IRestoreStateCommand {
-  action: 'restoreState';
-  state: string;
+  lazy: boolean;
 }
 
 export interface ICheckCommand {
@@ -793,9 +818,7 @@ export interface ISuggestCommend {
 
 export type IProcCommand = ISetupCommand
   | ICheckCommand
-  | ISuggestCommend
-  | IDumpStateCommand
-  | IRestoreStateCommand;
+  | ISuggestCommend;
 
 function entry(data: IProcCommand) {
   const proc = prefix(); // hack, this gets processed out
@@ -803,19 +826,13 @@ function entry(data: IProcCommand) {
 
   switch (data.action) {
   case 'setup':
-    proc.setup(data.affData, data.wordsData);
+    proc.setup(data.affData, data.wordsData, data.lazy);
     break;
   case 'check':
     result = proc.check(data.word);
     break;
   case 'suggest':
     result = proc.suggest(data.word, data.limit);
-    break;
-  case 'dumpState':
-    result = proc.dumpDictionaryState();
-    break;
-  case 'restoreState':
-    result = proc.restoreDictionaryState(data.state);
     break;
   default:
     throw new Error(`Unknown action from data: ${JSON.stringify(data)}`);
