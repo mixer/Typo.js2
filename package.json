@@ -1,6 +1,6 @@
 {
   "name": "@mcph/typo.js2",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Typo.js is a JavaScript spellchecker that uses Hunspell-style dictionaries.",
   "typings": "lib/src/index",
   "main": "lib/src/index.js",
