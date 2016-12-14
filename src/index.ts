@@ -88,6 +88,14 @@ export default class Typo {
     });
   }
 
+  public dumpState(): Promise<string> {
+    return this.worker.run({ action: 'dumpState' });
+  }
+
+  public restoreState(state: string): Promise<void> {
+    return this.worker.run({ action: 'restoreState', state });
+  }
+
   public destroy() {
     this.worker.destroy();
   }

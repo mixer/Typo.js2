@@ -19,15 +19,125 @@ function prefix() {
   let rules: { [name: string]: IAAFRule };
   let compoundRuleCodes: { [name: string]: string[] };
   let dictionaryTable: IDictionaryTable;
-  const compoundRules: (string | RegExp)[] = [];
-  const replacementTable: [string, string][] = [];
-  const flags: {
+  let deletionTable: { [deleted: string]: string[] };
+  let compoundRules: (string | RegExp)[] = [];
+  let replacementTable: [string, string][] = [];
+  let flags: {
     COMPOUNDMIN: string,
     FLAG?: string,
     KEEPCASE: string,
     NEEDAFFIX?: string,
     ONLYINCOMPOUND?: string,
   } = Object.create(null);
+
+  const maxEditDistance = 2;
+
+  const damlev = (() => {
+    // Cache the codes and score arrays to significantly speed up damlev calls:
+    // there's no need to re-allocate them.
+    let sourceCodes: number[];
+    let targetCodes: number[];
+    let score: number[];
+
+    /**
+     * Clears the cached arrays, freeing memory that would otherwise be kept
+     * forever.
+     */
+    function uncache() {
+      sourceCodes = new Array(32);
+      targetCodes = new Array(32);
+      score = new Array(33 * 33);
+    }
+
+    uncache();
+
+    /**
+     * growArray will return an array that's at least as large as the provided
+     * size. It may or may not return the same array that was passed in.
+     * @param  {Array} arr
+     * @param  {Number} size
+     * @return {Array}
+     */
+    function growArray(arr: number[], size: number) {
+      if (size <= arr.length) {
+        return arr;
+      }
+
+      var target = arr.length;
+      while (target < size) {
+        target *= 2;
+      }
+
+      return new Array(target);
+    }
+
+    /**
+     * Returns the edit distance between the source and target strings.
+     * @param  {String} source
+     * @param  {Strign} target
+     * @return {Number}
+     * @license MIT
+     * @copyright 2016 WatchBeam Inc.
+     * @see https://github.com/WatchBeam/damlev/blob/master/damlev.ts
+     */
+    return function damlev (source: string, target: string) {
+      // If one of the strings is blank, returns the length of the other (the
+      // cost of the n insertions)
+      if (!source) {
+        return target.length;
+      } else if (!target){
+        return source.length;
+      }
+
+      const sourceLength = source.length;
+      const targetLength = target.length;
+      let i: number;
+
+      // Initialize a char code cache array
+      sourceCodes = growArray(sourceCodes, sourceLength);
+      targetCodes = growArray(targetCodes, targetLength);
+      for (i = 0; i < sourceLength; i++) { sourceCodes[i] = source.charCodeAt(i); }
+      for (i = 0; i < targetLength; i++) { targetCodes[i] = target.charCodeAt(i); }
+
+      // Initialize the scoring matrix
+      const INF = sourceLength + targetLength;
+      const rowSize = sourceLength + 1;
+      score = growArray(score, (sourceLength + 1) * (targetLength + 1));
+      score[0] = INF;
+
+      for (i = 0; i <= sourceLength; i++) {
+        score[(i + 1) * rowSize] = INF;
+        score[(i + 1) * rowSize + 1] = i;
+      }
+
+      for (i = 0; i <= targetLength; i++) {
+        score[i] = INF;
+        score[1 * rowSize + i + 1] = i;
+      }
+
+      // Run the damlev algorithm
+      let chars: { [key: string]: number } = {};
+      let j: number, DB: number, i1: number, j1: number, j2: number, newScore: number;
+      for (i = 1; i <= sourceLength; i += 1) {
+        DB = 0;
+        for (j = 1; j <= targetLength; j += 1) {
+          i1 = chars[targetCodes[j - 1]] || 0;
+          j1 = DB;
+
+          if (sourceCodes[i - 1] == targetCodes[j - 1]) {
+            newScore = score[i * rowSize + j];
+            DB = j;
+          } else {
+            newScore = Math.min(score[i * rowSize + j], Math.min(score[(i + 1) * rowSize + j], score[i * rowSize + j + 1])) + 1;
+          }
+
+          score[(i + 1) * rowSize + j + 1] = Math.min(newScore, score[i1 * rowSize + j1] + (i - i1) + (j - j1 - 1));
+        }
+        chars[sourceCodes[i - 1]] = i;
+      }
+      return score[(sourceLength + 1) * rowSize + targetLength + 1];
+    };
+  })();
 
   /**
    * Removes comment lines and then cleans up blank lines and trailing whitespace.
@@ -395,13 +505,49 @@ function prefix() {
 		return false;
 	}
 
+  function generateDeletions(
+    word: string,
+    maxDistance: number,
+    editDistance: number = 0,
+    deletes: { [delItem: string]: boolean } = Object.create(null),
+  ): string[] {
+    if(word.length > 1 ) {
+      for (let i = 0; i < word.length; i++) {
+        let delItem: string = word.substring(0, i) + word.substring(i + 1);
 
-  let alphabet = 'abcdefghijklmnopqrstuvwxyz';
+        if (!deletes[delItem]) {
+          deletes[delItem] = true;
+          if (editDistance + 1 < maxDistance) {
+            generateDeletions(delItem, maxDistance, editDistance + 1, deletes);
+          }
+        }
+
+      }
+    }
+
+    return editDistance === 0 ? Object.keys(deletes) : null;
+  }
+
+  function generateDeletionTable() {
+    for (let word in dictionaryTable) {
+      const deletions = generateDeletions(word, 0);
+      for (let i = 0; i < deletions.length; i++) {
+        if (!deletionTable[deletions[i]]) {
+          deletionTable[deletions[i]] = [word];
+        } else {
+          deletionTable[deletions[i]].push(word);
+        }
+      }
+    }
+  }
+
   let memoized: { [word: string]: { suggestions: string[], limit: number } } = Object.create(null);
 
   const proc = {
     setup(affData: string, wordsData: string) {
       rules = parseAAF(affData);
+      memoized = Object.create(null);
+      deletionTable = Object.create(null);
 
       // Save the rule codes that are used in compound rules.
       compoundRuleCodes = Object.create(null);
@@ -448,6 +594,7 @@ function prefix() {
         }
 
         compoundRules[i] = new RegExp(expressionText, 'i');
+        generateDeletionTable();
       }
     },
 
@@ -539,110 +686,23 @@ function prefix() {
         }
       }
 
-      /*
-      if (!self.alphabet) {
-        // Use the alphabet as implicitly defined by the words in the dictionary.
-        var alphaHash = {};
-
-        for (var i in self.dictionaryTable) {
-          for (var j = 0, _len = i.length; j < _len; j++) {
-            alphaHash[i[j]] = true;
-          }
-        }
-
-        for (var i in alphaHash) {
-          self.alphabet += i;
-        }
-
-        var alphaArray = self.alphabet.split('');
-        alphaArray.sort();
-        self.alphabet = alphaArray.join('');
-      }
-      */
-
-      function edits1(words: string[]) {
-        let rv: string[] = [];
-        let ii: number, i: number, j: number, _iilen: number, _len: number, _jlen: number;
-
-        for (ii = 0, _iilen = words.length; ii < _iilen; ii++) {
-          const word = words[ii];
-
-          for (i = 0, _len = word.length + 1; i < _len; i++) {
-            const s = [ word.substring(0, i), word.substring(i) ];
-
-            if (s[1]) {
-              rv.push(s[0] + s[1].substring(1));
-            }
-
-            // Eliminate transpositions of identical letters
-            if (s[1].length > 1 && s[1][1] !== s[1][0]) {
-              rv.push(s[0] + s[1][1] + s[1][0] + s[1].substring(2));
-            }
-
-            if (s[1]) {
-              for (j = 0, _jlen = alphabet.length; j < _jlen; j++) {
-                // Eliminate replacement of a letter by itself
-                if (alphabet[j] != s[1].substring(0,1)){
-                  rv.push(s[0] + alphabet[j] + s[1].substring(1));
-                }
-              }
-            }
-
-            if (s[1]) {
-              for (j = 0, _jlen = alphabet.length; j < _jlen; j++) {
-                rv.push(s[0] + alphabet[j] + s[1]);
-              }
-            }
-          }
-        }
-
-        return rv;
-      }
-
-      function known(words: string[]) {
-        const rv: string[] = [];
-
-        for (let i = 0, _len = words.length; i < _len; i++) {
-          if (proc.check(words[i])) {
-            rv.push(words[i]);
-          }
-        }
-
-        return rv;
-      }
-
       function correct(word: string) {
-        // Get the edit-distance-1 and edit-distance-2 forms of this word.
-        const ed1 = edits1([word]);
-        const ed2 = edits1(ed1);
+        const deletions = generateDeletions(word, maxEditDistance);
 
-        const corrections = known(ed1.concat(ed2));
-
-        // Sort the edits based on how many different ways they were created.
-        const weightedCorrections: { [correction: string]: number } = Object.create(null);
-
-        for (let i = 0, _len = corrections.length; i < _len; i++) {
-          if (!(corrections[i] in weightedCorrections)) {
-            weightedCorrections[corrections[i]] = 1;
-          }
-          else {
-            weightedCorrections[corrections[i]] += 1;
+        let corrections: string[] = [];
+        for (let i = 0; i < deletions.length; i++) {
+          const words = deletionTable[deletions[i]];
+          if (words) {
+            for (let k = 0; k < words.length; k++) {
+              if (corrections.indexOf(words[k]) === -1) {
+                corrections.push(words[k]);
+              }
+            }
           }
         }
 
-        const sortedCorrections: [string, number][] = [];
-
-        for (const i in weightedCorrections) {
-          sortedCorrections.push([ i, weightedCorrections[i] ]);
-        }
-
-        sortedCorrections.sort((a, b) => {
-          if (a[1] < b[1]) {
-            return -1;
-          }
-
-          return 1;
-        }).reverse();
+        const sortedCorrections: [string, number][] = <any> corrections.map(c => [c, damlev(word, c)]);
+        sortedCorrections.sort((a, b) => a[1] - b[1]);
 
         const rv: string[] = [];
 
@@ -676,7 +736,30 @@ function prefix() {
       };
 
       return memoized[word]['suggestions'];
-    }
+    },
+
+    dumpDictionaryState() {
+      return JSON.stringify({
+        rules,
+        compoundRuleCodes,
+        dictionaryTable,
+        deletionTable,
+        compoundRules,
+        replacementTable,
+        flags,
+      });
+    },
+
+    restoreDictionaryState(data: string) {
+      const obj = JSON.parse(data);
+      rules = obj.rules;
+      compoundRuleCodes = obj.compoundRuleCodes;
+      dictionaryTable = obj.dictionaryTable;
+      deletionTable = obj.deletionTable;
+      compoundRules = obj.compoundRules;
+      replacementTable = obj.replacementTable;
+      flags = obj.flags;
+    },
   };
 
   return proc;
@@ -686,6 +769,15 @@ export interface ISetupCommand {
   action: 'setup';
   affData: string;
   wordsData: string;
+}
+
+export interface IDumpStateCommand {
+  action: 'dumpState';
+}
+
+export interface IRestoreStateCommand {
+  action: 'restoreState';
+  state: string;
 }
 
 export interface ICheckCommand {
@@ -699,7 +791,11 @@ export interface ISuggestCommend {
   limit: number;
 }
 
-export type IProcCommand = ISetupCommand | ICheckCommand | ISuggestCommend;
+export type IProcCommand = ISetupCommand
+  | ICheckCommand
+  | ISuggestCommend
+  | IDumpStateCommand
+  | IRestoreStateCommand;
 
 function entry(data: IProcCommand) {
   const proc = prefix(); // hack, this gets processed out
@@ -714,6 +810,12 @@ function entry(data: IProcCommand) {
     break;
   case 'suggest':
     result = proc.suggest(data.word, data.limit);
+    break;
+  case 'dumpState':
+    result = proc.dumpDictionaryState();
+    break;
+  case 'restoreState':
+    result = proc.restoreDictionaryState(data.state);
     break;
   default:
     throw new Error(`Unknown action from data: ${JSON.stringify(data)}`);

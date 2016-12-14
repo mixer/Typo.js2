@@ -2,8 +2,8 @@
   "name": "typo.js2",
   "version": "1.0.0",
   "description": "Typo.js is a JavaScript spellchecker that uses Hunspell-style dictionaries.",
-  "typings": "lib/index",
-  "main": "lib/index.js",
+  "typings": "lib/src/index",
+  "main": "lib/src/index.js",
   "devDependencies": {
     "@types/chai": "^3.4.34",
     "@types/mocha": "^2.2.33",
@@ -16,8 +16,8 @@
   },
   "scripts": {
     "test": "npm run test:unit",
-    "test:unit": "mocha --compilers ts:ts-node/register test/unit/*.test.ts",
-    "build": "tsc"
+    "test:unit": "mocha --compilers ts:ts-node/register test/unit/*.test.ts --timeout 20000",
+    "build": "rm -rf lib && tsc && cp -R src/dictionaries lib/src"
   },
   "repository": {
     "type": "git",

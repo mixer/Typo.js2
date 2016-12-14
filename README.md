@@ -1,4 +1,4 @@
-Typo.js is a JavaScript spellchecker that uses Hunspell-style dictionaries. This project, Typo.js2 is a modified version which includes performance enhancements and webworker support.
+Typo.js is a JavaScript spellchecker that uses Hunspell-style dictionaries. This project, Typo.js2 is a modified version which includes performance enhancements (a FAROO checking algorithm) and webworker support.
 
 Usage
 =====
