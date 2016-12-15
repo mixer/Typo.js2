@@ -820,8 +820,7 @@ export type IProcCommand = ISetupCommand
   | ICheckCommand
   | ISuggestCommend;
 
-function entry(data: IProcCommand) {
-  const proc = prefix(); // hack, this gets processed out
+function entry(data: IProcCommand, proc = prefix()) {
   let result: any;
 
   switch (data.action) {
@@ -842,4 +841,4 @@ function entry(data: IProcCommand) {
 }
 
 export const prefixStr = `var proc = (${prefix})();`;
-export const entryStr = `(${String(entry).replace('proc = prefix()', '_tmp = null')})(data);`;
+export const entryStr = `(${entry})(data, proc);`;
