@@ -1,6 +1,8 @@
+import { readFile as readLocalFile } from 'fs';
+
+import { dictionaries } from './manifest';
 import { InlineWebWorker } from './worker';
 import { entryStr, IProcCommand, prefixStr } from './proc';
-import { readFile as readLocalFile } from 'fs';
 
 function readFile(path: string): Promise<string> {
   if (typeof fetch !== 'undefined') { // browsers
@@ -100,5 +102,9 @@ export default class Typo {
 
   public destroy() {
     this.worker.destroy();
+  }
+
+  public static getDefaultDictionaries(): string[] {
+    return dictionaries;
   }
 }

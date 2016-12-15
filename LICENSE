@@ -46,3 +46,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+The dictionaries distributed as part of this bundle are from the LibreOffice
+project, and are, for the most part, licensed under the MPL (full text here:
+https://www.libreoffice.org/about-us/licenses/) unless stated otherwise. Use
+of these dictionaries in your own code is entirely optional.
